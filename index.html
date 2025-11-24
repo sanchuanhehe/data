@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32组件下载量可视化 - Treemap</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            height: calc(100vh - 40px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 2.2rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .stats-bar {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-around;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+            font-size: 0.9rem;
+        }
+
+        .controls-container {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+            margin-bottom: 10px;
+        }
+
+        .search-input:focus {
+            border-color: #667eea;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .control-label {
+            font-size: 14px;
+            color: #666;
+            font-weight: 500;
+            min-width: 60px;
+        }
+
+        .filter-select {
+            padding: 6px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            min-width: 120px;
+        }
+
+        .filter-select:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            flex: 1;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .chart-title {
+            font-size: 1.4rem;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .chart-info {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        #treemapChart {
+            width: 100%;
+            flex: 1;
+            min-height: 400px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+            font-size: 1.2rem;
+        }
+
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 0;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            color: white;
+            padding: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .close {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 5px;
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
+
+        .close:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-body {
+            padding: 25px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .component-summary {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .summary-item {
+            text-align: center;
+        }
+
+        .summary-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .summary-value {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .version-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .version-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .version-item:hover {
+            background: #e8f1ff;
+            transform: translateX(5px);
+        }
+
+        .version-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .version-number {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .version-date {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .version-downloads {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #e74c3c;
+        }
+
+        .version-hash {
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #666;
+            word-break: break-all;
+            margin-top: 10px;
+            background: #f0f0f0;
+            padding: 8px;
+            border-radius: 5px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                height: calc(100vh - 20px);
+            }
+            
+            .stats-bar {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .control-group {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .filter-select {
+                min-width: 150px;
+            }
+
+            .modal-content {
+                margin: 5% auto;
+                width: 95%;
+            }
+
+            #treemapChart {
+                min-height: 350px;
+            }
+
+            .summary-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ESP32 组件下载量可视化</h1>
+        
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-number" id="totalComponents">0</div>
+                <div class="stat-label">总组件数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="totalDownloads">0</div>
+                <div class="stat-label">总下载量</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="totalVersions">0</div>
+                <div class="stat-label">总版本数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="avgDownloads">0</div>
+                <div class="stat-label">平均下载量</div>
+            </div>
+        </div>
+
+        <div class="controls-container">
+            <input type="text" class="search-input" id="searchInput" placeholder="搜索组件名称...">
+            <div class="controls">
+                <div class="control-group">
+                    <span class="control-label">排序:</span>
+                    <select class="filter-select" id="sortBy">
+                        <option value="downloads">按下载量</option>
+                        <option value="name">按名称</option>
+                        <option value="versions">按版本数</option>
+                        <option value="created">按创建时间</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <span class="control-label">命名空间:</span>
+                    <select class="filter-select" id="namespace">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <span class="control-label">显示数量:</span>
+                    <select class="filter-select" id="displayCount">
+                        <option value="50">前50个</option>
+                        <option value="100">前100个</option>
+                        <option value="200">前200个</option>
+                        <option value="all">全部</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">正在加载组件数据...</div>
+        
+        <div class="chart-container" id="chartContainer" style="display: none;">
+            <div class="chart-header">
+                <div class="chart-title">组件下载量分布图</div>
+                <div class="chart-info" id="chartInfo">点击矩形块查看组件详情</div>
+            </div>
+            <div id="treemapChart"></div>
+        </div>
+    </div>
+
+    <!-- 模态框 -->
+    <div id="componentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle"></div>
+                <button class="close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        let componentsData = [];
+        let filteredData = [];
+        let treemapChart = null;
+
+        // 工具函数
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toString();
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('zh-CN');
+        }
+
+        // 生成颜色
+        function generateColors(count) {
+            const colors = [];
+            for (let i = 0; i < count; i++) {
+                const hue = (i * 137.508) % 360; // 黄金角度分割
+                colors.push(`hsl(${hue}, 70%, 65%)`);
+            }
+            return colors;
+        }
+
+        // 计算统计信息
+        function calculateStats() {
+            const totalComponents = filteredData.length;
+            const totalDownloads = filteredData.reduce((sum, comp) => sum + comp.downloads, 0);
+            const totalVersions = filteredData.reduce((sum, comp) => sum + comp.versions.length, 0);
+            const avgDownloads = totalComponents > 0 ? Math.round(totalDownloads / totalComponents) : 0;
+            
+            document.getElementById('totalComponents').textContent = totalComponents;
+            document.getElementById('totalDownloads').textContent = formatNumber(totalDownloads);
+            document.getElementById('totalVersions').textContent = totalVersions;
+            document.getElementById('avgDownloads').textContent = formatNumber(avgDownloads);
+        }
+
+        // 过滤和排序数据
+        function filterAndSortData() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const sortBy = document.getElementById('sortBy').value;
+            const namespace = document.getElementById('namespace').value;
+            const displayCount = document.getElementById('displayCount').value;
+
+            // 过滤数据
+            filteredData = componentsData.filter(component => {
+                const matchesSearch = component.name.toLowerCase().includes(searchTerm);
+                const matchesNamespace = !namespace || component.namespace === namespace;
+                return matchesSearch && matchesNamespace;
+            });
+
+            // 排序数据
+            filteredData.sort((a, b) => {
+                switch (sortBy) {
+                    case 'downloads':
+                        return b.downloads - a.downloads;
+                    case 'name':
+                        return a.name.localeCompare(b.name);
+                    case 'versions':
+                        return b.versions.length - a.versions.length;
+                    case 'created':
+                        return new Date(b.created_at) - new Date(a.created_at);
+                    default:
+                        return 0;
+                }
+            });
+
+            // 限制显示数量
+            if (displayCount !== 'all') {
+                filteredData = filteredData.slice(0, parseInt(displayCount));
+            }
+
+            updateTreemap();
+            calculateStats();
+        }
+
+        // 填充命名空间过滤器
+        function populateNamespaceFilter() {
+            const namespaces = [...new Set(componentsData.map(comp => comp.namespace))];
+            const select = document.getElementById('namespace');
+            
+            namespaces.forEach(namespace => {
+                const option = document.createElement('option');
+                option.value = namespace;
+                option.textContent = namespace;
+                select.appendChild(option);
+            });
+        }
+
+        // 更新Treemap
+        function updateTreemap() {
+            if (!treemapChart || filteredData.length === 0) return;
+
+            // 按命名空间分组数据
+            const namespaceGroups = {};
+            filteredData.forEach(component => {
+                if (!namespaceGroups[component.namespace]) {
+                    namespaceGroups[component.namespace] = [];
+                }
+                namespaceGroups[component.namespace].push({
+                    name: component.name,
+                    value: component.downloads,
+                    versions: component.versions.length,
+                    componentData: component
+                });
+            });
+
+            // 构建Treemap数据结构
+            const treemapData = Object.keys(namespaceGroups).map(namespace => ({
+                name: namespace,
+                children: namespaceGroups[namespace]
+            }));
+
+            const option = {
+                tooltip: {
+                    trigger: 'item',
+                    formatter: function(params) {
+                        const data = params.data;
+                        if (data.children) {
+                            // 命名空间节点
+                            const totalDownloads = data.children.reduce((sum, child) => sum + child.value, 0);
+                            return `
+                                <strong>${data.name}</strong><br/>
+                                组件数量: ${data.children.length}<br/>
+                                总下载量: ${formatNumber(totalDownloads)}
+                            `;
+                        } else {
+                            // 组件节点
+                            return `
+                                <strong>${data.name}</strong><br/>
+                                命名空间: ${params.treePathInfo[1].name}<br/>
+                                下载量: ${formatNumber(data.value)}<br/>
+                                版本数: ${data.versions}
+                            `;
+                        }
+                    }
+                },
+                series: [{
+                    name: 'ESP32组件',
+                    type: 'treemap',
+                    data: treemapData,
+                    width: '100%',
+                    height: '100%',
+                    roam: false,
+                    nodeClick: 'link',
+                    breadcrumb: {
+                        show: false
+                    },
+                    label: {
+                        show: true,
+                        formatter: function(params) {
+                            const data = params.data;
+                            if (data.children) {
+                                return `{namespace|${data.name}}\\n{count|${data.children.length} 个组件}`;
+                            } else {
+                                return `{name|${data.name}}\\n{downloads|${formatNumber(data.value)}}`;
+                            }
+                        },
+                        rich: {
+                            namespace: {
+                                fontSize: 14,
+                                fontWeight: 'bold',
+                                color: '#fff'
+                            },
+                            count: {
+                                fontSize: 10,
+                                color: '#fff',
+                                opacity: 0.8
+                            },
+                            name: {
+                                fontSize: 12,
+                                fontWeight: 'bold',
+                                color: '#fff'
+                            },
+                            downloads: {
+                                fontSize: 10,
+                                color: '#fff',
+                                opacity: 0.9
+                            }
+                        }
+                    },
+                    upperLabel: {
+                        show: true,
+                        height: 30,
+                        formatter: function(params) {
+                            return params.name;
+                        },
+                        textStyle: {
+                            color: '#fff',
+                            fontSize: 14,
+                            fontWeight: 'bold'
+                        }
+                    },
+                    itemStyle: {
+                        borderColor: '#fff',
+                        borderWidth: 2,
+                        gapWidth: 2
+                    },
+                    levels: [
+                        {
+                            itemStyle: {
+                                borderWidth: 3,
+                                gapWidth: 3
+                            }
+                        },
+                        {
+                            colorSaturation: [0.3, 0.8],
+                            itemStyle: {
+                                gapWidth: 1,
+                                borderColorSaturation: 0.7
+                            }
+                        }
+                    ]
+                }]
+            };
+
+            treemapChart.setOption(option);
+            
+            document.getElementById('chartInfo').textContent = 
+                `显示 ${filteredData.length} 个组件 - 点击矩形块查看详情`;
+        }
+
+        // 初始化图表
+        function initChart() {
+            const chartDom = document.getElementById('treemapChart');
+            treemapChart = echarts.init(chartDom);
+            
+            // 点击事件
+            treemapChart.on('click', function(params) {
+                if (params.data.componentData) {
+                    showComponentDetails(params.data.componentData);
+                }
+            });
+
+            window.addEventListener('resize', function() {
+                treemapChart.resize();
+            });
+        }
+
+        // 显示组件详情
+        function showComponentDetails(component) {
+            document.getElementById('modalTitle').textContent = `${component.name} (${component.namespace})`;
+            
+            const versionsHtml = component.versions.map(version => `
+                <div class="version-item">
+                    <div class="version-header">
+                        <div class="version-number">v${version.version}</div>
+                        <div class="version-date">${formatDate(version.created_at)}</div>
+                        <div class="version-downloads">${formatNumber(version.downloads_total)}</div>
+                    </div>
+                    <div class="version-hash">
+                        <strong>Hash:</strong> ${version.component_hash}
+                    </div>
+                    ${version.yanked ? '<div style="color: #e74c3c; margin-top: 10px;"><strong>已撤回</strong></div>' : ''}
+                </div>
+            `).join('');
+
+            document.getElementById('modalBody').innerHTML = `
+                <div class="component-summary">
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <div class="summary-label">总下载量</div>
+                            <div class="summary-value">${formatNumber(component.downloads)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">版本数量</div>
+                            <div class="summary-value">${component.versions.length}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">创建时间</div>
+                            <div class="summary-value">${formatDate(component.created_at)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Star 数</div>
+                            <div class="summary-value">${component.stars || 0}</div>
+                        </div>
+                    </div>
+                    ${component.description ? `<p style="margin-top: 15px;"><strong>描述:</strong> ${component.description}</p>` : ''}
+                </div>
+                <h3 style="margin-bottom: 15px; color: #667eea;">版本历史</h3>
+                <div class="version-list">
+                    ${versionsHtml}
+                </div>
+            `;
+
+            document.getElementById('componentModal').style.display = 'block';
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('componentModal').style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('componentModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+
+        // 加载数据
+        async function loadComponentsData() {
+            try {
+                document.getElementById('loading').textContent = '正在加载组件数据...';
+                
+                const response = await fetch('esp_components_fixed.json');
+                if (response.ok) {
+                    document.getElementById('loading').textContent = '正在解析数据...';
+                    const data = await response.json();
+                    componentsData = Array.isArray(data) ? data : [data];
+                    console.log(`成功加载 ${componentsData.length} 个组件`);
+                } else {
+                    throw new Error('无法加载JSON文件');
+                }
+            } catch (error) {
+                console.log('加载数据出错:', error);
+                document.getElementById('loading').textContent = '数据加载失败，请检查esp_components_fixed.json文件是否存在';
+                return;
+            }
+            
+            // 初始化过滤数据
+            filteredData = [...componentsData];
+            
+            // 填充命名空间过滤器
+            populateNamespaceFilter();
+            
+            // 初始化图表
+            initChart();
+            
+            // 添加事件监听器
+            document.getElementById('searchInput').addEventListener('input', filterAndSortData);
+            document.getElementById('sortBy').addEventListener('change', filterAndSortData);
+            document.getElementById('namespace').addEventListener('change', filterAndSortData);
+            document.getElementById('displayCount').addEventListener('change', filterAndSortData);
+            
+            // 显示图表容器
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('chartContainer').style.display = 'flex';
+            
+            // 首次渲染
+            updateTreemap();
+            calculateStats();
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(loadComponentsData, 500);
+        });
+    </script>
+</body>
+</html>
