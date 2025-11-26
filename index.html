@@ -647,6 +647,13 @@
 
             treemapChart.setOption(option);
             
+            // 强制重新调整图表大小，确保正确渲染
+            setTimeout(() => {
+                if (treemapChart) {
+                    treemapChart.resize();
+                }
+            }, 50);
+            
             document.getElementById('chartInfo').textContent = 
                 `显示 ${filteredData.length} 个组件 - 点击矩形块查看详情`;
         }
@@ -663,9 +670,31 @@
                 }
             });
 
+            // 添加resize监听
             window.addEventListener('resize', function() {
-                treemapChart.resize();
+                if (treemapChart) {
+                    treemapChart.resize();
+                }
             });
+
+            // 使用ResizeObserver监听容器尺寸变化
+            if (window.ResizeObserver) {
+                const resizeObserver = new ResizeObserver(entries => {
+                    for (let entry of entries) {
+                        if (treemapChart && entry.target === chartDom) {
+                            treemapChart.resize();
+                        }
+                    }
+                });
+                resizeObserver.observe(chartDom);
+            }
+
+            // 确保图表在初始化后立即调整大小
+            setTimeout(() => {
+                if (treemapChart) {
+                    treemapChart.resize();
+                }
+            }, 100);
         }
 
         // 显示组件详情
@@ -769,14 +798,29 @@
             document.getElementById('loading').style.display = 'none';
             document.getElementById('chartContainer').style.display = 'flex';
             
-            // 首次渲染
-            updateTreemap();
-            calculateStats();
+            // 等待DOM更新后再渲染图表
+            setTimeout(() => {
+                updateTreemap();
+                calculateStats();
+                
+                // 再次确保图表大小正确
+                setTimeout(() => {
+                    if (treemapChart) {
+                        treemapChart.resize();
+                    }
+                }, 200);
+            }, 100);
         }
 
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(loadComponentsData, 500);
+            // 等待页面完全渲染后再初始化
+            setTimeout(() => {
+                // 使用requestAnimationFrame确保在下一次重绘之前执行
+                requestAnimationFrame(() => {
+                    loadComponentsData();
+                });
+            }, 100);
         });
     </script>
 </body>
